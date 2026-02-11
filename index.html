@@ -265,7 +265,7 @@
             // Outlook Sync Logic
             const fetchOutlookEvents = async () => {
                 const url = "https://outlook.office365.com/owa/calendar/44b05ba37aa243cdbfacbdffc3d6f298@dxc.com/ae7bbd72013d42be8b740fe810dbabfa17364111464169301611/calendar.ics";
-                const proxyUrl = `https://corsproxy.io/?url=${encodeURIComponent(url)}`;
+                const proxyUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`;
 
                 try {
                     const response = await fetch(proxyUrl);
