@@ -1,0 +1,1306 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Research Balance Calendar</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            projects: '#3b82f6', // blue-500
+                            research: '#8b5cf6', // violet-500
+                            work: '#64748b',    // slate-500
+                            club: '#eab308',    // yellow-500
+                            nomikai: '#f97316', // orange-500
+                            off: '#22c55e',     // green-500
+                        }
+                    },
+                    gridTemplateRows: {
+                        'layout': 'repeat(3, minmax(0, 1fr))',
+                    },
+                    gridTemplateColumns: {
+                        'layout': 'repeat(3, minmax(0, 1fr))',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- React & ReactDOM (UMD) -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+
+    <!-- Babel (Standalone) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Date-fns (UMD) -->
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@3.6.0/cdn.min.js"></script>
+
+    <link rel="stylesheet" href="css/main.css">
+
+    <style>
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+
+        #error-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.95);
+            z-index: 9999;
+            padding: 2rem;
+            color: #ef4444;
+            font-family: monospace;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 text-slate-900 h-screen w-screen overflow-hidden">
+    <div id="root"></div>
+    <div id="error-overlay"></div>
+
+    <script>
+        // Error Trap
+        window.onerror = function (msg, url, line, col, error) {
+            const overlay = document.getElementById('error-overlay');
+            overlay.style.display = 'block';
+            overlay.innerHTML = `
+                <h1 class="text-2xl font-bold mb-4">Error Loading App</h1>
+                <p class="mb-2"><strong>Message:</strong> ${msg}</p>
+                <p class="mb-2"><strong>Line:</strong> ${line}:${col}</p>
+                <pre class="bg-gray-100 p-4 rounded text-xs overflow-auto">${error ? error.stack : ''}</pre>
+                <p class="mt-4 text-gray-500">Please verify you are connected to the internet to load libraries.</p>
+            `;
+            return false;
+        };
+    </script>
+
+    <script type="text/babel">
+        // Import globals
+        const { useState, useEffect, createContext, useContext, useMemo } = React;
+        const { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, isSameMonth, isSameDay, addMonths, subMonths, addDays } = window.dateFns;
+
+        // --- ICONS (Inlined SVG Components) ---
+        const ChevronLeft = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m15 18-6-6 6-6" /></svg>
+        );
+        const ChevronRight = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m9 18 6-6-6-6" /></svg>
+        );
+        const CheckCircle = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
+        );
+        const Circle = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10" /></svg>
+        );
+        const Plus = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+        );
+        const AlertTriangle = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
+        );
+        const Briefcase = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="20" height="14" x="2" y="7" rx="2" ry="2" /><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" /></svg>
+        );
+        const PartyPopper = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M5.8 11.3 2 22l10.7-3.79" /><path d="M4 3h.01" /><path d="M22 8h.01" /><path d="M15 2h.01" /><path d="M22 20h.01" /><path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12v.1a5.43 5.43 0 0 1-1.69 4.06l-.32.33a5.43 5.43 0 0 1-4.06 1.69h-.1a2.9 2.9 0 0 0-3.12 1.96L8 16.24" /><path d="m16 9 6 6" /><path d="m9 16 6 6" /></svg>
+        );
+        const Beer = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M17 11h1a3 3 0 0 1 0 6h-1" /><path d="M9 12v6" /><path d="M13 12v6" /><path d="M14 7.5c-1 0-1.44.5-3 .5s-2-.5-3-.5-1.72.5-2.5.5a2.5 2.5 0 0 1 0-5c.78 0 1.57.5 2.5.5S9.44 2 11 2s2 1.5 3 1.5 1.72-.5 2.5-.5a2.5 2.5 0 0 1 0 5c-.78 0-1.5-.5-2.5-.5Z" /><path d="M5 8v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8" /></svg>
+        );
+        const CalendarIcon = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="18" height="18" x="3" y="4" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+        );
+        const Edit2 = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" /></svg>
+        );
+        const Trash2 = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /></svg>
+        );
+        const X = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+        );
+
+        // Helper for clsx/tailwind-merge replacement
+        const clsx = (...args) => {
+            return args.filter(Boolean).map(a => {
+                if (typeof a === 'string') return a;
+                if (Array.isArray(a)) return clsx(...a);
+                if (typeof a === 'object') {
+                    return Object.entries(a).filter(([k, v]) => v).map(([k]) => k).join(' ');
+                }
+                return '';
+            }).join(' ');
+        };
+
+        // --- CONFIGURATION ---
+        // Here you can customize the default schedule blocks!
+        // 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
+        const DEFAULT_PATTERNS = {
+            NORMAL: {
+                id: 'normal',
+                name: '通常週 (Normal)',
+                color: 'bg-blue-100 text-blue-800',
+                schedule: {
+                    1: { blocks: [{ start: 9, end: 18, type: 'work', label: 'Work' }] },
+                    2: { blocks: [{ start: 9, end: 18, type: 'work', label: 'Work' }] },
+                    3: { blocks: [{ start: 9, end: 13, type: 'work', label: 'Work' }, { start: 14, end: 22, type: 'research', label: 'Research' }] },
+                    4: { blocks: [{ start: 9, end: 13, type: 'work', label: 'Work' }, { start: 14, end: 22, type: 'research', label: 'Research' }] },
+                    5: { blocks: [{ start: 9, end: 17, type: 'work', label: 'Work' }, { start: 18, end: 23, type: 'research', label: 'Report Prep' }] },
+                    6: { blocks: [{ start: 8, end: 23, type: 'research', label: 'Research (All Day)' }] },
+                    0: { blocks: [{ start: 8, end: 13, type: 'research', label: 'Research' }, { start: 14, end: 18, type: 'work', label: 'Work Prep' }] },
+                }
+            },
+            CLUB: {
+                id: 'club',
+                name: 'ご褒美 (Club)',
+                color: 'bg-yellow-100 text-yellow-800',
+                schedule: {
+                    1: { blocks: [{ start: 9, end: 18, type: 'work', label: 'Work' }] },
+                    2: { blocks: [{ start: 9, end: 18, type: 'work', label: 'Work' }] },
+                    3: { blocks: [{ start: 9, end: 13, type: 'work', label: 'Work' }, { start: 14, end: 22, type: 'research', label: 'Research' }] },
+                    4: { blocks: [{ start: 9, end: 13, type: 'work', label: 'Work' }, { start: 14, end: 22, type: 'research', label: 'Research' }] },
+                    5: { blocks: [{ start: 9, end: 17, type: 'work', label: 'Work' }, { start: 18, end: 23, type: 'research', label: 'Report' }] },
+                    6: { blocks: [{ start: 8, end: 18, type: 'research', label: 'Research' }, { start: 20, end: 29, type: 'club', label: 'CLUB REWARD' }] },
+                    0: { blocks: [{ start: 10, end: 20, type: 'off', label: 'Free' }] },
+                }
+            },
+            NOMIKAI: {
+                id: 'nomikai',
+                name: 'ご褒美 (Nomikai)',
+                color: 'bg-orange-100 text-orange-800',
+                schedule: {
+                    1: { blocks: [{ start: 9, end: 18, type: 'work', label: 'Work' }] },
+                    2: { blocks: [{ start: 9, end: 18, type: 'work', label: 'Work' }] },
+                    3: { blocks: [{ start: 9, end: 13, type: 'work', label: 'Work' }, { start: 14, end: 22, type: 'research', label: 'Research' }] },
+                    4: { blocks: [{ start: 9, end: 13, type: 'work', label: 'Work' }, { start: 14, end: 18, type: 'research', label: 'Light Report' }] },
+                    5: { blocks: [{ start: 9, end: 17, type: 'work', label: 'Work' }, { start: 18, end: 26, type: 'nomikai', label: 'NOMIKAI' }] },
+                    6: { blocks: [{ start: 8, end: 22, type: 'off', label: 'Recovery' }] }, // Full day OFF
+                    0: { blocks: [{ start: 8, end: 22, type: 'off', label: 'Family/Friends' }] }, // Full day OFF
+                }
+            }
+        };
+
+        const StoreContext = createContext();
+
+        const StoreProvider = ({ children }) => {
+            const [weeks, setWeeks] = useState({});
+            const [monthlyGoals, setMonthlyGoals] = useState({});
+            const [patterns, setPatterns] = useState(DEFAULT_PATTERNS);
+            const [selectedDate, setSelectedDate] = useState(new Date());
+
+            useEffect(() => {
+                const saved = localStorage.getItem('research-calendar-data');
+                const savedPatterns = localStorage.getItem('research-calendar-patterns');
+                if (saved) {
+                    try {
+                        const data = JSON.parse(saved);
+                        setWeeks(data.weeks || {});
+                        setMonthlyGoals(data.monthlyGoals || {});
+                    } catch (e) {
+                        console.error("Failed to load data", e);
+                    }
+                }
+                if (savedPatterns) {
+                    try {
+                        setPatterns(JSON.parse(savedPatterns));
+                    } catch (e) {
+                        console.error("Failed to load patterns", e);
+                    }
+                }
+            }, []);
+
+            useEffect(() => {
+                localStorage.setItem('research-calendar-data', JSON.stringify({ weeks, monthlyGoals }));
+            }, [weeks, monthlyGoals]);
+
+            useEffect(() => {
+                localStorage.setItem('research-calendar-patterns', JSON.stringify(patterns));
+            }, [patterns]);
+
+            const setWeekPattern = (weekId, patternId) => {
+                setWeeks(prev => ({
+                    ...prev,
+                    [weekId]: {
+                        ...prev[weekId],
+                        pattern: patternId
+                    }
+                }));
+            };
+
+            const getWeekData = (weekId) => {
+                return weeks[weekId] || { pattern: 'normal', goals: [], tasks: [], events: [] };
+            };
+
+            const addMonthlyGoal = (monthId, goal) => {
+                setMonthlyGoals(prev => {
+                    const current = prev[monthId] || [];
+                    return { ...prev, [monthId]: [...current, { id: Date.now(), text: goal, completed: false }] };
+                });
+            };
+
+            const toggleMonthlyGoal = (monthId, goalId) => {
+                setMonthlyGoals(prev => {
+                    const current = prev[monthId] || [];
+                    return { ...prev, [monthId]: current.map(g => g.id === goalId ? { ...g, completed: !g.completed } : g) };
+                });
+            };
+
+            const addWeekGoal = (weekId, goal) => {
+                setWeeks(prev => {
+                    const week = prev[weekId] || { pattern: 'normal', goals: [], tasks: [], events: [] };
+                    const currentGoals = week.goals || [];
+                    return {
+                        ...prev,
+                        [weekId]: {
+                            ...week,
+                            goals: [...currentGoals, { id: Date.now(), text: goal, completed: false }]
+                        }
+                    };
+                });
+            };
+
+            const addTask = (weekId, taskName, hours) => {
+                setWeeks(prev => {
+                    const week = prev[weekId] || { pattern: 'normal', goals: [], tasks: [], events: [] };
+                    const currentTasks = week.tasks || [];
+                    return {
+                        ...prev,
+                        [weekId]: {
+                            ...week,
+                            tasks: [...currentTasks, { id: Date.now(), text: taskName, hours: parseFloat(hours), completed: false }]
+                        }
+                    };
+                });
+            };
+
+            const toggleTask = (weekId, taskId) => {
+                setWeeks(prev => {
+                    const week = prev[weekId];
+                    if (!week) return prev;
+                    return {
+                        ...prev,
+                        [weekId]: {
+                            ...week,
+                            tasks: week.tasks.map(t => t.id === taskId ? { ...t, completed: !t.completed } : t)
+                        }
+                    };
+                });
+            };
+
+            // New: Add specific event
+            const addEvent = (weekId, event) => {
+                setWeeks(prev => {
+                    const week = prev[weekId] || { pattern: 'normal', goals: [], tasks: [], events: [] };
+                    const currentEvents = week.events || [];
+                    return {
+                        ...prev,
+                        [weekId]: {
+                            ...week,
+                            events: [...currentEvents, { id: Date.now(), ...event }]
+                        }
+                    };
+                });
+            };
+
+            // New: Update Pattern
+            const updatePattern = (patternId, dayIdx, blocks) => {
+                const pKey = patternId.toUpperCase();
+                setPatterns(prev => ({
+                    ...prev,
+                    [pKey]: {
+                        ...prev[pKey],
+                        schedule: {
+                            ...prev[pKey].schedule,
+                            [dayIdx]: { blocks }
+                        }
+                    }
+                }));
+            };
+
+            // New: Update Event
+            const updateEvent = (weekId, eventId, eventData) => {
+                setWeeks(prev => {
+                    const week = prev[weekId];
+                    if (!week || !week.events) return prev;
+                    return {
+                        ...prev,
+                        [weekId]: {
+                            ...week,
+                            events: week.events.map(e => e.id === eventId ? { ...e, ...eventData } : e)
+                        }
+                    };
+                });
+            };
+
+            // New: Delete Event
+            const deleteEvent = (weekId, eventId) => {
+                setWeeks(prev => {
+                    const week = prev[weekId];
+                    if (!week || !week.events) return prev;
+                    return {
+                        ...prev,
+                        [weekId]: {
+                            ...week,
+                            events: week.events.filter(e => e.id !== eventId)
+                        }
+                    };
+                });
+            };
+
+            const value = {
+                weeks,
+                monthlyGoals,
+                selectedDate,
+                setSelectedDate,
+                setWeekPattern,
+                getWeekData,
+                addWeekGoal,
+                addMonthlyGoal,
+                toggleMonthlyGoal,
+                addTask,
+                toggleTask,
+                addEvent,
+                updateEvent,
+                deleteEvent,
+                patterns,
+                updatePattern
+            };
+
+            return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
+        };
+
+        const useStore = () => useContext(StoreContext);
+
+        // --- COMPONENTS ---
+
+        const Modal = ({ isOpen, onClose, title, children }) => {
+            if (!isOpen) return null;
+            return (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 m-4 relative animate-in fade-in zoom-in duration-200">
+                        <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
+                            <X size={20} />
+                        </button>
+                        <h3 className="text-xl font-bold text-gray-800 mb-4">{title}</h3>
+                        {children}
+                    </div>
+                </div>
+            );
+        };
+
+        const BlockEditor = ({ isOpen, onClose, onSave, onDelete, initialData, defaultDate }) => {
+            // Helper to format Date to YYYY-MM-DD
+            const formatDate = (d) => format(d, 'yyyy-MM-dd');
+
+            const [formData, setFormData] = useState(() => {
+                const base = initialData || { title: '', start: 9, end: 10, type: 'work' };
+                // Determine date: existing event date, or defaultDate, or today
+                let dateStr = formatDate(new Date());
+                if (initialData && initialData.date) {
+                    dateStr = initialData.date;
+                } else if (defaultDate) {
+                    dateStr = formatDate(defaultDate);
+                }
+                return { ...base, date: dateStr };
+            });
+
+            // Generate time options: 4.0, 4.5, 5.0 ... 28.0
+            const TIME_OPTIONS = Array.from({ length: 49 }, (_, i) => {
+                const val = 4 + (i * 0.5);
+                const label = `${Math.floor(val)}:${val % 1 === 0 ? '00' : '30'}`;
+                return { val, label };
+            });
+
+            useEffect(() => {
+                if (isOpen) {
+                    const base = initialData || { title: '', start: 9, end: 10, type: 'work' };
+                    let dateStr = formatDate(new Date());
+                    if (initialData && initialData.date) {
+                        dateStr = initialData.date;
+                    } else if (defaultDate) {
+                        dateStr = formatDate(defaultDate);
+                    }
+                    setFormData({ ...base, date: dateStr });
+                }
+            }, [isOpen, initialData, defaultDate]);
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                onSave({
+                    ...formData,
+                    duration: formData.end - formData.start
+                });
+                onClose();
+            };
+
+            return (
+                <Modal isOpen={isOpen} onClose={onClose} title={initialData?.id ? "Edit Event" : "Add Event"}>
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                            <input
+                                type="text"
+                                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                                value={formData.title}
+                                onChange={e => setFormData({ ...formData, title: e.target.value })}
+                                required
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                            <input
+                                type="date"
+                                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                                value={formData.date}
+                                onChange={e => setFormData({ ...formData, date: e.target.value })}
+                                required
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+                                <select
+                                    className="w-full p-2 border border-gray-300 rounded"
+                                    value={formData.start}
+                                    onChange={e => setFormData({ ...formData, start: parseFloat(e.target.value) })}
+                                >
+                                    {TIME_OPTIONS.map(t =>
+                                        <option key={t.val} value={t.val}>{t.label}</option>
+                                    )}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
+                                <select
+                                    className="w-full p-2 border border-gray-300 rounded"
+                                    value={formData.end}
+                                    onChange={e => setFormData({ ...formData, end: parseFloat(e.target.value) })}
+                                >
+                                    {TIME_OPTIONS.map(t =>
+                                        <option key={t.val} value={t.val} disabled={t.val <= formData.start}>{t.label}</option>
+                                    )}
+                                </select>
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                            <select
+                                className="w-full p-2 border border-gray-300 rounded"
+                                value={formData.type}
+                                onChange={e => setFormData({ ...formData, type: e.target.value })}
+                            >
+                                <option value="work">Work</option>
+                                <option value="research">Research</option>
+                                <option value="meeting">Meeting</option>
+                                <option value="class">Class</option>
+                                <option value="club">Club</option>
+                                <option value="nomikai">Nomikai</option>
+                                <option value="off">Off/Recovery</option>
+                            </select>
+                        </div>
+                        <div className="flex justify-end space-x-2 pt-4 border-t">
+                            {onDelete && (
+                                <button type="button" onClick={() => { onDelete(); onClose(); }} className="px-4 py-2 text-red-600 hover:bg-red-50 rounded flex items-center">
+                                    <Trash2 size={16} className="mr-2" /> Delete
+                                </button>
+                            )}
+                            <button type="submit" className="px-4 py-2 bg-brand-projects text-white rounded hover:bg-blue-600">
+                                Save Changes
+                            </button>
+                        </div>
+                    </form>
+                </Modal>
+            );
+        };
+
+        const PatternEditor = ({ isOpen, onClose, pattern, onUpdate }) => {
+            const [selectedDay, setSelectedDay] = useState('1'); // Mon
+            const [blocks, setBlocks] = useState([]);
+
+            useEffect(() => {
+                if (isOpen && pattern) {
+                    setBlocks(pattern.schedule[selectedDay]?.blocks || []);
+                }
+            }, [isOpen, pattern, selectedDay]);
+
+            const handleUpdateBlock = (idx, newBlock) => {
+                const newBlocks = [...blocks];
+                newBlocks[idx] = newBlock;
+                setBlocks(newBlocks);
+                onUpdate(pattern.id, selectedDay, newBlocks);
+            };
+
+            const handleAddBlock = () => {
+                const newBlocks = [...blocks, { start: 9, end: 10, type: 'work', label: 'New Block' }];
+                setBlocks(newBlocks);
+                onUpdate(pattern.id, selectedDay, newBlocks);
+            };
+
+            const handleDeleteBlock = (idx) => {
+                const newBlocks = blocks.filter((_, i) => i !== idx);
+                setBlocks(newBlocks);
+                onUpdate(pattern.id, selectedDay, newBlocks);
+            };
+
+            if (!pattern) return null;
+
+            return (
+                <Modal isOpen={isOpen} onClose={onClose} title={`Edit ${pattern.name}`}>
+                    <div className="space-y-4">
+                        <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg">
+                            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, i) => (
+                                <button
+                                    key={d}
+                                    onClick={() => setSelectedDay(i.toString())}
+                                    className={clsx(
+                                        "flex-1 py-1 text-xs rounded-md font-medium transition-all",
+                                        selectedDay === i.toString() ? "bg-white shadow text-brand-projects" : "text-gray-500 hover:text-gray-700"
+                                    )}
+                                >
+                                    {d}
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                            {blocks.map((block, idx) => (
+                                <div key={idx} className="flex items-center space-x-2 bg-gray-50 p-2 rounded border">
+                                    <input
+                                        type="text"
+                                        value={block.label}
+                                        onChange={e => handleUpdateBlock(idx, { ...block, label: e.target.value })}
+                                        className="w-24 p-1 text-xs border rounded"
+                                    />
+                                    <select
+                                        value={block.start}
+                                        onChange={e => handleUpdateBlock(idx, { ...block, start: parseInt(e.target.value) })}
+                                        className="w-12 p-1 text-xs border rounded"
+                                    >
+                                        {Array.from({ length: 25 }, (_, i) => i + 4).map(h => <option key={h} value={h}>{h}</option>)}
+                                    </select>
+                                    <span className="text-gray-400">-</span>
+                                    <select
+                                        value={block.end}
+                                        onChange={e => handleUpdateBlock(idx, { ...block, end: parseInt(e.target.value) })}
+                                        className="w-12 p-1 text-xs border rounded"
+                                    >
+                                        {Array.from({ length: 25 }, (_, i) => i + 4).map(h => <option key={h} value={h}>{h}</option>)}
+                                    </select>
+                                    <select
+                                        value={block.type}
+                                        onChange={e => handleUpdateBlock(idx, { ...block, type: e.target.value })}
+                                        className="flex-1 p-1 text-xs border rounded"
+                                    >
+                                        <option value="work">Work</option>
+                                        <option value="research">Res</option>
+                                        <option value="off">Off</option>
+                                        <option value="nomikai">Nomi</option>
+                                    </select>
+                                    <button onClick={() => handleDeleteBlock(idx)} className="text-red-500 hover:text-red-700">
+                                        <Trash2 size={14} />
+                                    </button>
+                                </div>
+                            ))}
+                            {blocks.length === 0 && <p className="text-xs text-gray-400 text-center py-4">No blocks for this day.</p>}
+                            <button onClick={handleAddBlock} className="w-full py-2 border-2 border-dashed border-gray-200 rounded text-gray-400 text-xs hover:border-brand-projects hover:text-brand-projects">
+                                + Add Block
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
+            );
+        };
+
+        const CalendarMonth = () => {
+            const { selectedDate, setSelectedDate, weeks, getWeekData } = useStore();
+
+            const monthStart = startOfMonth(selectedDate);
+            const monthEnd = endOfMonth(selectedDate);
+            const startDate = startOfWeek(monthStart, { weekStartsOn: 1 });
+            const endDate = endOfWeek(monthEnd, { weekStartsOn: 1 });
+
+            const calendarDays = eachDayOfInterval({ start: startDate, end: endDate });
+
+            const nextMonth = () => setSelectedDate(addMonths(selectedDate, 1));
+            const prevMonth = () => setSelectedDate(subMonths(selectedDate, 1));
+
+            const onDateClick = (day) => {
+                setSelectedDate(day);
+            };
+
+            return (
+                <div className="h-full flex flex-col">
+                    <div className="flex justify-between items-center mb-6">
+                        <h2 className="text-2xl font-bold text-gray-800">{format(selectedDate, 'MMMM yyyy')}</h2>
+                        <div className="flex space-x-2">
+                            <button onClick={prevMonth} className="p-2 hover:bg-gray-100 rounded-full"><ChevronLeft size={20} /></button>
+                            <button onClick={nextMonth} className="p-2 hover:bg-gray-100 rounded-full"><ChevronRight size={20} /></button>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-7 mb-2">
+                        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day =>
+                            <div key={day} className="text-center text-sm font-medium text-gray-500 uppercase tracking-wider">{day}</div>
+                        )}
+                    </div>
+
+                    <div className="grid grid-cols-7 grid-rows-6 gap-2 flex-1">
+                        {calendarDays.map((day, idx) => {
+                            const isCurrentMonth = isSameMonth(day, monthStart);
+                            const isSelected = isSameDay(day, selectedDate);
+                            const weekId = format(day, "yyyy-'W'II");
+                            const weekData = getWeekData(weekId);
+                            const dayEvents = (weekData.events || []).filter(e => e.dayIdx == day.getDay());
+
+                            return (
+                                <div
+                                    key={day.toString()}
+                                    onClick={() => onDateClick(day)}
+                                    className={clsx(
+                                        "p-2 rounded-lg cursor-pointer transition-all border flex flex-col hover:shadow-md h-full min-h-[80px]",
+                                        isSelected ? "ring-2 ring-brand-research border-transparent" : "border-gray-100",
+                                        !isCurrentMonth && "opacity-40 bg-gray-50",
+                                        isCurrentMonth && "bg-white"
+                                    )}
+                                >
+                                    <div className="flex justify-between items-start mb-1">
+                                        <span className={clsx(
+                                            "text-sm font-medium h-7 w-7 flex items-center justify-center rounded-full",
+                                            isSameDay(day, new Date()) ? "bg-brand-research text-white" : "text-gray-700"
+                                        )}>
+                                            {format(day, 'd')}
+                                        </span>
+                                    </div>
+
+                                    <div className="flex-1 flex flex-col gap-1 overflow-hidden">
+                                        {dayEvents.slice(0, 3).map((event, i) => (
+                                            <div key={i} className={clsx(
+                                                "text-[10px] px-1 py-0.5 rounded truncate text-white",
+                                                event.type === 'work' && "bg-brand-work",
+                                                event.type === 'research' && "bg-brand-research",
+                                                event.type === 'club' && "bg-brand-club",
+                                                event.type === 'nomikai' && "bg-brand-nomikai",
+                                                event.type === 'off' && "bg-brand-off",
+                                                event.type === 'class' && "bg-pink-500",
+                                                event.type === 'meeting' && "bg-red-500",
+                                                // Default fallback
+                                                !event.type && "bg-gray-400"
+                                            )}>
+                                                {event.title}
+                                            </div>
+                                        ))}
+                                        {dayEvents.length > 3 && (
+                                            <span className="text-[10px] text-gray-400 pl-1">+{dayEvents.length - 3} more</span>
+                                        )}
+                                    </div>
+
+                                    {day.getDay() === 1 && (
+                                        <div className="mt-auto pt-1">
+                                            <span className="inline-block px-2 py-0.5 text-[10px] rounded-full bg-blue-50 text-blue-800 border border-blue-100">
+                                                {weekData.pattern === 'normal' ? 'Normal' : weekData.pattern === 'club' ? 'Club' : 'Nomikai'}
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            );
+        };
+
+        const CalendarWeek = () => {
+            const HOURS = Array.from({ length: 25 }, (_, i) => i + 4);
+            const { selectedDate, getWeekData, patterns, updateEvent, deleteEvent, addEvent } = useStore();
+            const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
+            const weekId = format(weekStart, "yyyy-'W'II");
+            const weekData = getWeekData(weekId);
+            const days = eachDayOfInterval({ start: weekStart, end: addDays(weekStart, 6) });
+
+            const [editingEvent, setEditingEvent] = useState(null);
+
+            const handleBlockClick = (block) => {
+                if (block.source === 'user') {
+                    // Calculate date for this block
+                    const blockDate = addDays(weekStart, block.dayIdx === 0 ? 6 : block.dayIdx - 1); // weekStart is Mon
+
+                    setEditingEvent({
+                        ...block,
+                        title: block.label,
+                        date: format(blockDate, 'yyyy-MM-dd')
+                    });
+                } else {
+                    // Could implement "Copy Pattern Block to Event" here if desired
+                }
+            };
+
+            const handleSaveEvent = (data) => {
+                if (editingEvent) {
+                    // Determine target week and day from selected date
+                    const targetDate = new Date(data.date);
+                    const targetWeekId = format(startOfWeek(targetDate, { weekStartsOn: 1 }), "yyyy-'W'II");
+                    const dayIdx = targetDate.getDay();
+
+                    // If week changed, delete from old, add to new
+                    if (targetWeekId !== weekId) {
+                        deleteEvent(weekId, editingEvent.id);
+                        addEvent(targetWeekId, {
+                            title: data.title,
+                            start: data.start,
+                            duration: data.end - data.start,
+                            type: data.type,
+                            dayIdx: dayIdx
+                        });
+                    } else {
+                        // Same week update
+                        updateEvent(weekId, editingEvent.id, {
+                            title: data.title,
+                            start: data.start,
+                            duration: data.end - data.start,
+                            type: data.type,
+                            dayIdx: dayIdx
+                        });
+                    }
+                    setEditingEvent(null);
+                }
+            };
+
+            const handleDeleteEvent = () => {
+                if (editingEvent) {
+                    deleteEvent(weekId, editingEvent.id);
+                    setEditingEvent(null);
+                }
+            };
+
+            const getBlocksForDay = (date, patternId) => {
+                const dayIdx = date.getDay();
+                const pattern = patterns[patternId.toUpperCase()] || patterns.NORMAL;
+
+                // Get Pattern Blocks (Background)
+                const patternBlocks = (pattern.schedule[dayIdx]?.blocks || []).map(b => ({ ...b, source: 'pattern' }));
+
+                // Get User Events (Foreground)
+                const userEvents = (weekData.events || [])
+                    .filter(e => e.dayIdx == dayIdx) // Match day index (string vs number safe)
+                    .map(e => ({
+                        start: parseFloat(e.start),
+                        end: parseFloat(e.start) + parseFloat(e.duration),
+                        type: e.type,
+                        type: e.type,
+                        label: e.title,
+                        source: 'user',
+                        id: e.id,
+                        dayIdx: e.dayIdx
+                    }));
+
+                // Combine them, user events on top (visually handled by generic map)
+                return [...patternBlocks, ...userEvents];
+            };
+
+            return (
+                <div className="h-full w-full flex flex-col overflow-hidden">
+                    <div className="flex-none h-8 flex border-b border-gray-100">
+                        <div className="w-20 flex-shrink-0 bg-white z-10 sticky left-0"></div>
+                        <div className="flex-1 flex overflow-hidden relative">
+                            {HOURS.map(h =>
+                                <div key={h} className="flex-1 text-xs text-gray-400 border-l border-gray-100 pl-1">
+                                    {`${h > 24 ? h - 24 : h}:00`}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto">
+                        {days.map(day => {
+                            const blocks = getBlocksForDay(day, weekData.pattern);
+                            return (
+                                <div key={day.toString()} className="flex h-16 border-b border-gray-50 relative group hover:bg-gray-50/50">
+                                    <div className="w-20 flex-shrink-0 flex flex-col justify-center items-center border-r border-gray-100 bg-white z-10 sticky left-0">
+                                        <span className="text-xs font-bold text-gray-700 uppercase">{format(day, 'EEE')}</span>
+                                        <span className="text-xs text-gray-400">{format(day, 'd')}</span>
+                                    </div>
+
+                                    <div className="flex-1 relative">
+                                        {HOURS.map((_, i) =>
+                                            <div
+                                                key={i}
+                                                className="absolute top-0 bottom-0 border-l border-gray-100"
+                                                style={{ left: `${(i / HOURS.length) * 100}%` }}
+                                            />
+                                        )}
+                                        {blocks.map((block, i) => {
+                                            const startPercent = ((block.start - 4) / HOURS.length) * 100;
+                                            const widthPercent = ((block.end - block.start) / HOURS.length) * 100;
+
+                                            let colorClass = "bg-gray-200 text-gray-600";
+                                            // More distinct colors for types
+                                            if (block.type === 'work') colorClass = "bg-brand-work text-white";
+                                            if (block.type === 'research') colorClass = "bg-brand-research text-white";
+                                            if (block.type === 'club') colorClass = "bg-brand-club text-white";
+                                            if (block.type === 'nomikai') colorClass = "bg-brand-nomikai text-white";
+                                            if (block.type === 'off') colorClass = "bg-brand-off text-white";
+                                            if (block.type === 'class') colorClass = "bg-pink-500 text-white";
+                                            if (block.type === 'meeting') colorClass = "bg-red-500 text-white";
+
+
+                                            // User events pop a bit more
+                                            if (block.source === 'user') {
+                                                colorClass += " ring-2 ring-white shadow-lg z-10";
+                                            } else {
+                                                colorClass += " opacity-80 z-0";
+                                            }
+
+                                            return (
+                                                <div
+                                                    key={i}
+                                                    onClick={() => handleBlockClick(block)}
+                                                    className={clsx("absolute top-2 bottom-2 rounded-md shadow-sm flex items-center justify-center text-xs font-bold overflow-hidden px-1 whitespace-nowrap transition-all hover:scale-[1.02] hover:shadow-md cursor-pointer", colorClass)}
+                                                    style={{ left: `${startPercent}%`, width: `${widthPercent}%` }}
+                                                    title={`${block.label} (${block.start}:00 - ${block.end}:00)`}
+                                                >
+                                                    {block.label}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                    {/* Render BlockEditor if editing */}
+                    {editingEvent && (
+                        <BlockEditor
+                            isOpen={!!editingEvent}
+                            onClose={() => setEditingEvent(null)}
+                            onSave={handleSaveEvent}
+                            onDelete={handleDeleteEvent}
+                            initialData={editingEvent}
+                        />
+                    )}
+                </div>
+            );
+        };
+
+        const GoalManager = () => {
+            const {
+                selectedDate, weeks, monthlyGoals,
+                addMonthlyGoal, toggleMonthlyGoal,
+                addWeekGoal, getWeekData,
+                addTask, toggleTask, setWeekPattern,
+                addEvent,
+                patterns,
+                updatePattern
+            } = useStore();
+
+            const monthId = format(selectedDate, 'yyyy-MM');
+            const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
+            const weekId = format(weekStart, "yyyy-'W'II");
+
+            const weekData = getWeekData(weekId);
+            const monthGoalsList = monthlyGoals[monthId] || [];
+
+            const [newMonthGoal, setNewMonthGoal] = useState('');
+            const [newWeekGoal, setNewWeekGoal] = useState('');
+            const [newTask, setNewTask] = useState('');
+            const [newTaskHours, setNewTaskHours] = useState('1');
+
+            // --- New Event State ---
+            // Replaced by Modal approach
+            const [showEventForm, setShowEventForm] = useState(false); // Used to trigger modal for new event
+            const [editingPatternId, setEditingPatternId] = useState(null);
+            const [editingEvent, setEditingEvent] = useState(null); // For editing existing events
+
+            const currentPattern = patterns[weekData.pattern.toUpperCase()] || patterns.NORMAL;
+
+            // Handlers for New Event Modal
+            const handleAddEventSave = (data) => {
+                const targetDate = new Date(data.date);
+                const targetWeekId = format(startOfWeek(targetDate, { weekStartsOn: 1 }), "yyyy-'W'II");
+                const dayIdx = targetDate.getDay();
+
+                addEvent(targetWeekId, {
+                    title: data.title,
+                    dayIdx: dayIdx,
+                    start: data.start,
+                    duration: data.end - data.start,
+                    type: data.type
+                });
+                setShowEventForm(false);
+            };
+
+            // Calculate Research Hours from BLOCKS
+            const totalResearchHours = useMemo(() => {
+                let hours = 0;
+                Object.values(currentPattern.schedule).forEach(day => {
+                    (day.blocks || []).forEach(b => {
+                        if (b.type === 'research') {
+                            hours += (b.end - b.start);
+                        }
+                    });
+                });
+                let eventHours = 0;
+                (weekData.events || []).forEach(e => {
+                    if (e.type === 'research') {
+                        eventHours += parseFloat(e.duration);
+                    }
+                });
+
+                return hours + eventHours;
+            }, [currentPattern, weekData.events]); // Dependency array updated
+
+            // Calculate ACTUAL hours from completed tasks
+            const actualResearchHours = useMemo(() => {
+                return (weekData.tasks || []).filter(t => t.completed).reduce((sum, t) => sum + (t.hours || 0), 0);
+            }, [weekData.tasks]);
+
+            // Calculate Planned Task Hours for overload warning
+            const plannedTaskHours = (weekData.tasks || []).reduce((acc, t) => acc + (t.completed ? 0 : t.hours), 0);
+            const isOverloaded = plannedTaskHours > totalResearchHours;
+
+            // Handlers
+            const handleAddMonthGoal = (e) => {
+                e.preventDefault();
+                if (!newMonthGoal.trim()) return;
+                addMonthlyGoal(monthId, newMonthGoal);
+                setNewMonthGoal('');
+            };
+
+            const handleAddWeekGoal = (e) => {
+                e.preventDefault();
+                if (!newWeekGoal.trim()) return;
+                addWeekGoal(weekId, newWeekGoal);
+                setNewWeekGoal('');
+            };
+
+            const handleAddTask = (e) => {
+                e.preventDefault();
+                if (!newTask.trim()) return;
+                addTask(weekId, newTask, newTaskHours);
+                setNewTask('');
+                setNewTaskHours('1');
+            };
+
+            const handleAddEvent = (e) => {
+                e.preventDefault();
+                // This function is no longer used directly for adding events due to the modal
+                // It was replaced by handleAddEventSave
+            };
+
+            const handleSaveExistingEvent = (data) => {
+                if (editingEvent) {
+                    const targetDate = new Date(data.date);
+                    const targetWeekId = format(startOfWeek(targetDate, { weekStartsOn: 1 }), "yyyy-'W'II");
+                    const dayIdx = targetDate.getDay();
+
+                    if (targetWeekId !== weekId || editingEvent.id !== data.id) { // If week changed or it's a new event being saved as existing
+                        deleteEvent(weekId, editingEvent.id);
+                        addEvent(targetWeekId, {
+                            title: data.title,
+                            start: data.start,
+                            duration: data.end - data.start,
+                            type: data.type,
+                            dayIdx: dayIdx
+                        });
+                    } else {
+                        updateEvent(weekId, editingEvent.id, {
+                            title: data.title,
+                            start: data.start,
+                            duration: data.end - data.start,
+                            type: data.type,
+                            dayIdx: dayIdx
+                        });
+                    }
+                    setEditingEvent(null);
+                }
+            };
+
+            const handleDeleteExistingEvent = () => {
+                if (editingEvent) {
+                    deleteEvent(weekId, editingEvent.id);
+                    setEditingEvent(null);
+                }
+            };
+
+            return (
+                <div className="h-full flex flex-col space-y-4">
+                    {/* Pattern Switcher */}
+                    <div className="bg-gray-50 p-3 rounded-xl border border-gray-200">
+                        <div className="flex justify-between items-center mb-2">
+                            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Weekly Pattern</h3>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                            {Object.values(patterns).map(pattern =>
+                                <div key={pattern.id} className="relative group">
+                                    <button
+                                        onClick={() => setWeekPattern(weekId, pattern.id)}
+                                        className={clsx(
+                                            "w-full flex flex-col items-center justify-center p-2 rounded-lg text-xs font-medium transition-all border-2",
+                                            weekData.pattern === pattern.id
+                                                ? "border-brand-research bg-white shadow-sm text-brand-research"
+                                                : "border-transparent hover:bg-gray-100 text-gray-500"
+                                        )}
+                                    >
+                                        {pattern.id === 'normal' && <Briefcase size={16} className="mb-1" />}
+                                        {pattern.id === 'club' && <PartyPopper size={16} className="mb-1" />}
+                                        {pattern.id === 'nomikai' && <Beer size={16} className="mb-1" />}
+                                        {pattern.name.split('(')[1].replace(')', '')}
+                                    </button>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); setEditingPatternId(pattern.id); }}
+                                        className="absolute top-1 right-1 p-1 text-gray-300 hover:text-brand-projects opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 rounded-full"
+                                        title="Edit Pattern Defaults"
+                                    >
+                                        <Edit2 size={12} />
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Pattern Editor Modal */}
+                    {editingPatternId && (
+                        <PatternEditor
+                            isOpen={!!editingPatternId}
+                            onClose={() => setEditingPatternId(null)}
+                            pattern={patterns[editingPatternId.toUpperCase()]}
+                            onUpdate={updatePattern}
+                        />
+                    )}
+
+                    {/* Balance Bar */}
+                    <div className="space-y-1">
+                        <div className="flex justify-between items-end">
+                            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Research Balance</h3>
+                            <span className={clsx("text-sm font-bold", isOverloaded ? "text-red-500" : "text-green-600")}>
+                                {`${plannedTaskHours}h / ${totalResearchHours}h`}
+                            </span>
+                        </div>
+                        <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                            <div
+                                className={clsx("h-full transition-all duration-500", isOverloaded ? "bg-red-500" : "bg-brand-research")}
+                                style={{ width: `${Math.min(100, (plannedTaskHours / totalResearchHours) * 100)}%` }}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Main Scroll Area */}
+                    <div className="flex-1 overflow-y-auto space-y-6 pr-2">
+
+
+
+                        {/* Event Adder Section (Restored & Modernized) */}
+                        <div className="space-y-4 pt-4 border-t border-gray-100">
+                            <div className="flex justify-between items-center">
+                                <h3 className="text-sm font-bold text-gray-800">Events</h3>
+                                <button
+                                    onClick={() => setShowEventForm(true)}
+                                    className="text-xs bg-brand-projects text-white px-3 py-1.5 rounded-lg flex items-center hover:bg-blue-600 transition-colors shadow-sm"
+                                >
+                                    <CalendarIcon size={12} className="mr-1.5" /> Add Event
+                                </button>
+                            </div>
+
+                            {/* New Event Modal - Triggered by button above, rendered via state */}
+                            {showEventForm && (
+                                <BlockEditor
+                                    isOpen={showEventForm}
+                                    onClose={() => setShowEventForm(false)}
+                                    onSave={handleAddEventSave}
+                                    initialData={null} // Empty for new event
+                                    defaultDate={selectedDate} // Pass current view date as default
+                                />
+                            )}
+                            {editingEvent && (
+                                <BlockEditor
+                                    isOpen={!!editingEvent}
+                                    onClose={() => setEditingEvent(null)}
+                                    onSave={handleSaveExistingEvent}
+                                    onDelete={handleDeleteExistingEvent}
+                                    initialData={editingEvent}
+                                />
+                            )}
+
+                            {/* Event List */}
+                            <div className="space-y-2">
+                                {(weekData.events || []).length === 0 && (
+                                    <p className="text-xs text-gray-400 italic">No events added yet.</p>
+                                )}
+                                {(weekData.events || []).map(e => (
+                                    <div
+                                        key={e.id}
+                                        className={clsx(
+                                            "flex justify-between items-center text-xs p-2.5 rounded-lg border-l-4 shadow-sm bg-white cursor-pointer hover:bg-gray-50 transition-colors",
+                                            e.type === 'work' && "border-brand-work",
+                                            e.type === 'research' && "border-brand-research",
+                                            e.type === 'meeting' && "border-red-500",
+                                            e.type === 'class' && "border-pink-500",
+                                            !e.type && "border-gray-200"
+                                        )}
+                                        onClick={() => {
+                                            // Calculate date for this event
+                                            // Note: This sidebar is within GoalManager, which knows 'weekStart'
+                                            // weekStart is Monday.
+                                            // e.dayIdx: 0=Sun, 1=Mon...
+                                            const eventDate = addDays(weekStart, e.dayIdx === 0 ? 6 : e.dayIdx - 1);
+
+                                            setEditingEvent({
+                                                ...e,
+                                                dayIdx: e.dayIdx,
+                                                start: e.start,
+                                                end: parseFloat(e.start) + parseFloat(e.duration),
+                                                label: e.title,
+                                                source: 'user',
+                                                date: format(eventDate, 'yyyy-MM-dd')
+                                            });
+                                        }}
+                                    >
+                                        <div className="flex flex-col">
+                                            <span className="font-semibold text-gray-700">{e.title}</span>
+                                            <span className="text-[10px] text-gray-400">
+                                                {format(addDays(weekStart, e.dayIdx === 0 ? 6 : e.dayIdx - 1), 'EEE d')} {e.start}:00 - {e.start + e.duration}:00
+                                            </span>
+                                        </div>
+                                        <Edit2 size={12} className="text-gray-300" />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Goals Section */}
+                        <div className="space-y-2 pt-2 border-t border-gray-100">
+                            <h3 className="text-sm font-bold text-gray-800">{format(selectedDate, 'MMMM')} Goals</h3>
+                            {monthGoalsList.map(g =>
+                                <div key={g.id} onClick={() => toggleMonthlyGoal(monthId, g.id)} className="flex items-center text-sm cursor-pointer group">
+                                    {g.completed ? <CheckCircle size={14} className="text-green-500 mr-2" /> : <Circle size={14} className="text-gray-300 mr-2" />}
+                                    <span className={clsx(g.completed && "line-through text-gray-400")}>{g.text}</span>
+                                </div>
+                            )}
+                            <form onSubmit={handleAddMonthGoal} className="flex mt-1">
+                                <input type="text" placeholder="+ Add Goal" className="w-full text-xs bg-transparent focus:outline-none" value={newMonthGoal} onChange={e => setNewMonthGoal(e.target.value)} />
+                            </form>
+                        </div>
+
+                        {/* Weekly Tasks Section */}
+                        <div className="space-y-3 pt-4 border-t border-gray-100">
+                            <h3 className="text-lg font-bold text-gray-800">Week of {format(weekStart, 'd MMM')}</h3>
+                            <div className="space-y-2">
+                                {(weekData.goals || []).map(g =>
+                                    <div key={g.id} className="flex items-center p-2 rounded bg-blue-50/50">
+                                        <CheckCircle size={16} className="text-brand-projects mr-2 opacity-0" />
+                                        <span className="text-sm font-medium text-brand-projects">{g.text}</span>
+                                    </div>
+                                )}
+                            </div>
+                            <form onSubmit={handleAddWeekGoal} className="flex items-center mt-2">
+                                <input
+                                    type="text"
+                                    placeholder="Set main goal for this week..."
+                                    className="w-full p-2 bg-gray-50 rounded text-sm focus:ring-2 focus:ring-blue-100 outline-none"
+                                    value={newWeekGoal}
+                                    onChange={e => setNewWeekGoal(e.target.value)}
+                                />
+                            </form>
+
+                            <div className="mt-4 space-y-2">
+                                <h4 className="text-xs font-semibold text-gray-400 uppercase">Tasks & Estimates</h4>
+                                {(weekData.tasks || []).map(t =>
+                                    <div
+                                        key={t.id}
+                                        onClick={() => toggleTask(weekId, t.id)}
+                                        className="flex items-center justify-between p-3 border border-gray-100 rounded-lg hover:border-gray-300 cursor-pointer transition-colors bg-white shadow-sm"
+                                    >
+                                        <div className="flex items-center">
+                                            {t.completed
+                                                ? <CheckCircle size={18} className="text-green-500 mr-3" />
+                                                : <Circle size={18} className="text-gray-300 mr-3" />
+                                            }
+                                            <span className={clsx("text-sm text-gray-700", t.completed && "line-through text-gray-400")}>{t.text}</span>
+                                        </div>
+                                        <span className="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-1 rounded">{t.hours}h</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            <form onSubmit={handleAddTask} className="flex items-center space-x-2 mt-2">
+                                <input
+                                    type="text"
+                                    placeholder="New task..."
+                                    className="flex-1 p-2 border border-gray-200 rounded text-sm focus:outline-none focus:border-brand-research"
+                                    value={newTask}
+                                    onChange={e => setNewTask(e.target.value)}
+                                />
+                                <input
+                                    type="number"
+                                    min="0.5" step="0.5"
+                                    className="w-16 p-2 border border-gray-200 rounded text-sm focus:outline-none focus:border-brand-research"
+                                    value={newTaskHours}
+                                    onChange={e => setNewTaskHours(e.target.value)}
+                                />
+                                <button type="submit" className="p-2 bg-brand-research text-white rounded hover:bg-violet-600 transition-colors">
+                                    <Plus size={16} />
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const Layout = () => {
+            return (
+                <div className="grid grid-cols-3 grid-rows-3 h-screen w-screen p-4 gap-4 overflow-hidden">
+                    <div className="col-span-2 row-span-2 glass-panel rounded-2xl p-6 overflow-hidden flex flex-col">
+                        <CalendarMonth />
+                    </div>
+
+                    <div className="col-span-1 row-span-2 glass-panel rounded-2xl p-6 overflow-hidden flex flex-col">
+                        <GoalManager />
+                    </div>
+
+                    <div className="col-span-3 row-span-1 glass-panel rounded-2xl p-4 overflow-hidden flex flex-col">
+                        <CalendarWeek />
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            return (
+                <StoreProvider>
+                    <Layout />
+                </StoreProvider>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+
+</html>
