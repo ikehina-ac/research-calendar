@@ -56,6 +56,9 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
+    <!-- iCal.js for Outlook sync -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ical.js/1.5.0/ical.min.js"></script>
+
     <link rel="stylesheet" href="css/main.css">
 
     <style>
@@ -257,6 +260,42 @@
             const [monthlyGoals, setMonthlyGoals] = useState({});
             const [patterns, setPatterns] = useState(DEFAULT_PATTERNS);
             const [selectedDate, setSelectedDate] = useState(new Date());
+            const [outlookEvents, setOutlookEvents] = useState([]);
+
+            // Outlook Sync Logic
+            const fetchOutlookEvents = async () => {
+                const url = "https://outlook.office365.com/owa/calendar/44b05ba37aa243cdbfacbdffc3d6f298@dxc.com/ae7bbd72013d42be8b740fe810dbabfa17364111464169301611/calendar.ics";
+                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+
+                try {
+                    const response = await fetch(proxyUrl);
+                    const data = await response.text();
+                    const jcalData = ICAL.parse(data);
+                    const comp = new ICAL.Component(jcalData);
+                    const vevents = comp.getAllSubcomponents('vevent');
+
+                    const events = vevents.map(vevent => {
+                        const event = new ICAL.Event(vevent);
+                        const start = event.startDate.toJSDate();
+                        const end = event.endDate.toJSDate();
+
+                        // Only sync events within a reasonable range (e.g., last 3 months to next 6 months)
+                        return {
+                            id: `outlook-${event.uid}`,
+                            title: event.summary,
+                            start: start.getHours() + (start.getMinutes() / 60),
+                            duration: (end - start) / (1000 * 60 * 60),
+                            type: 'meeting', // Outlook matches 'meeting' color
+                            dayIdx: start.getDay(),
+                            date: format(start, 'yyyy-MM-dd'),
+                            source: 'outlook'
+                        };
+                    });
+                    setOutlookEvents(events);
+                } catch (e) {
+                    console.error("Failed to fetch Outlook events", e);
+                }
+            };
 
             // Auth listener
             useEffect(() => {
@@ -265,6 +304,7 @@
                     setLoading(false);
                     if (u) {
                         document.getElementById('login-screen').classList.add('hidden');
+                        fetchOutlookEvents(); // Sync when logged in
                     } else {
                         document.getElementById('login-screen').classList.remove('hidden');
                     }
@@ -284,6 +324,7 @@
                         setWeeks(data.weeks || {});
                         setMonthlyGoals(data.monthlyGoals || {});
                         setPatterns(data.patterns || DEFAULT_PATTERNS);
+                        // Refresh Outlook data periodically if needed
                     } else {
                         // Migration from localStorage if it's a first time user on this device
                         const saved = localStorage.getItem('research-calendar-data');
@@ -457,7 +498,22 @@
                 selectedDate,
                 setSelectedDate,
                 setWeekPattern,
-                getWeekData,
+                getWeekData: (weekId) => {
+                    const data = weeks[weekId] || { pattern: 'normal', goals: [], tasks: [], events: [] };
+                    // Inject outlook events into the week data dynamically
+                    const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
+                    const weekEnd = addDays(weekStart, 7);
+
+                    const filteredOutlook = outlookEvents.filter(e => {
+                        const d = new Date(e.date);
+                        return d >= weekStart && d < weekEnd;
+                    });
+
+                    return {
+                        ...data,
+                        events: [...(data.events || []), ...filteredOutlook]
+                    };
+                },
                 addWeekGoal,
                 addMonthlyGoal,
                 toggleMonthlyGoal,
