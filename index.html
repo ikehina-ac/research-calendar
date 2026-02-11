@@ -799,7 +799,7 @@
         };
 
         const CalendarMonth = () => {
-            const { selectedDate, setSelectedDate, weeks, getWeekData } = useStore();
+            const { selectedDate, setSelectedDate, weeks, getWeekData, showOutlook, toggleOutlook } = useStore();
 
             const monthStart = startOfMonth(selectedDate);
             const monthEnd = endOfMonth(selectedDate);
@@ -908,7 +908,7 @@
 
         const CalendarWeek = () => {
             const HOURS = Array.from({ length: 25 }, (_, i) => i + 4);
-            const { selectedDate, getWeekData, patterns, updateEvent, deleteEvent, addEvent } = useStore();
+            const { selectedDate, getWeekData, patterns, updateEvent, deleteEvent, addEvent, hideOutlookEvent } = useStore();
             const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
             const weekId = format(weekStart, "yyyy-'W'II");
             const weekData = getWeekData(weekId);
@@ -1086,7 +1086,7 @@
                 addMonthlyGoal, toggleMonthlyGoal,
                 addWeekGoal, getWeekData,
                 addTask, toggleTask, setWeekPattern,
-                addEvent,
+                addEvent, updateEvent, deleteEvent,
                 patterns,
                 updatePattern
             } = useStore();
