@@ -261,6 +261,8 @@
             const [patterns, setPatterns] = useState(DEFAULT_PATTERNS);
             const [selectedDate, setSelectedDate] = useState(new Date());
             const [outlookEvents, setOutlookEvents] = useState([]);
+            const [hiddenOutlookIds, setHiddenOutlookIds] = useState([]);
+            const [showOutlook, setShowOutlook] = useState(true);
 
             // Outlook Sync Logic
             const fetchOutlookEvents = async () => {
@@ -324,7 +326,8 @@
                         setWeeks(data.weeks || {});
                         setMonthlyGoals(data.monthlyGoals || {});
                         setPatterns(data.patterns || DEFAULT_PATTERNS);
-                        // Refresh Outlook data periodically if needed
+                        setHiddenOutlookIds(data.hiddenOutlookIds || []);
+                        if (data.showOutlook !== undefined) setShowOutlook(data.showOutlook);
                     } else {
                         // Migration from localStorage if it's a first time user on this device
                         const saved = localStorage.getItem('research-calendar-data');
@@ -349,6 +352,18 @@
             const saveToCloud = (updates) => {
                 if (!user) return;
                 db.collection('users').doc(user.uid).set(updates, { merge: true });
+            };
+
+            const hideOutlookEvent = (id) => {
+                const newHidden = [...hiddenOutlookIds, id];
+                setHiddenOutlookIds(newHidden);
+                saveToCloud({ hiddenOutlookIds: newHidden });
+            };
+
+            const toggleOutlook = () => {
+                const newVal = !showOutlook;
+                setShowOutlook(newVal);
+                saveToCloud({ showOutlook: newVal });
             };
 
             const setWeekPattern = (weekId, patternId) => {
@@ -498,16 +513,19 @@
                 selectedDate,
                 setSelectedDate,
                 setWeekPattern,
+                hideOutlookEvent,
+                showOutlook,
+                toggleOutlook,
                 getWeekData: (weekId) => {
                     const data = weeks[weekId] || { pattern: 'normal', goals: [], tasks: [], events: [] };
                     // Inject outlook events into the week data dynamically
                     const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
                     const weekEnd = addDays(weekStart, 7);
 
-                    const filteredOutlook = outlookEvents.filter(e => {
+                    const filteredOutlook = showOutlook ? outlookEvents.filter(e => {
                         const d = new Date(e.date);
-                        return d >= weekStart && d < weekEnd;
-                    });
+                        return d >= weekStart && d < weekEnd && !hiddenOutlookIds.includes(e.id);
+                    }) : [];
 
                     return {
                         ...data,
@@ -800,7 +818,17 @@
             return (
                 <div className="h-full flex flex-col">
                     <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-2xl font-bold text-gray-800">{format(selectedDate, 'MMMM yyyy')}</h2>
+                        <div className="flex items-center space-x-6">
+                            <h2 className="text-2xl font-bold text-gray-800">{format(selectedDate, 'MMMM yyyy')}</h2>
+                            <label className="flex items-center cursor-pointer group">
+                                <span className="mr-2 text-xs font-medium text-gray-500 group-hover:text-gray-700 transition-colors">Outlook Sync</span>
+                                <div className="relative">
+                                    <input type="checkbox" className="sr-only" checked={showOutlook} onChange={toggleOutlook} />
+                                    <div className={clsx("block h-6 w-10 rounded-full transition-colors", showOutlook ? "bg-blue-500" : "bg-gray-300")}></div>
+                                    <div className={clsx("dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform", showOutlook && "transform translate-x-4")}></div>
+                                </div>
+                            </label>
+                        </div>
                         <div className="flex space-x-2">
                             <button onClick={prevMonth} className="p-2 hover:bg-gray-100 rounded-full"><ChevronLeft size={20} /></button>
                             <button onClick={nextMonth} className="p-2 hover:bg-gray-100 rounded-full"><ChevronRight size={20} /></button>
@@ -898,8 +926,10 @@
                         title: block.label,
                         date: format(blockDate, 'yyyy-MM-dd')
                     });
-                } else {
-                    // Could implement "Copy Pattern Block to Event" here if desired
+                } else if (block.source === 'outlook') {
+                    if (confirm(`Hide this Outlook event from this calendar?\n"${block.label}"\n(This will not affect your Outlook account)`)) {
+                        hideOutlookEvent(block.id);
+                    }
                 }
             };
 
@@ -1291,10 +1321,10 @@
 
                             {/* Event List */}
                             <div className="space-y-2">
-                                {(weekData.events || []).length === 0 && (
+                                {(weekData.events || []).filter(e => e.source !== 'outlook').length === 0 && (
                                     <p className="text-xs text-gray-400 italic">No events added yet.</p>
                                 )}
-                                {(weekData.events || []).map(e => (
+                                {(weekData.events || []).filter(e => e.source !== 'outlook').map(e => (
                                     <div
                                         key={e.id}
                                         className={clsx(
