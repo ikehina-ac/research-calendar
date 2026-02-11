@@ -265,10 +265,11 @@
             // Outlook Sync Logic
             const fetchOutlookEvents = async () => {
                 const url = "https://outlook.office365.com/owa/calendar/44b05ba37aa243cdbfacbdffc3d6f298@dxc.com/ae7bbd72013d42be8b740fe810dbabfa17364111464169301611/calendar.ics";
-                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
 
                 try {
                     const response = await fetch(proxyUrl);
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                     const data = await response.text();
                     const jcalData = ICAL.parse(data);
                     const comp = new ICAL.Component(jcalData);
@@ -279,13 +280,12 @@
                         const start = event.startDate.toJSDate();
                         const end = event.endDate.toJSDate();
 
-                        // Only sync events within a reasonable range (e.g., last 3 months to next 6 months)
                         return {
                             id: `outlook-${event.uid}`,
                             title: event.summary,
                             start: start.getHours() + (start.getMinutes() / 60),
-                            duration: (end - start) / (1000 * 60 * 60),
-                            type: 'meeting', // Outlook matches 'meeting' color
+                            duration: Math.max(0.5, (end - start) / (1000 * 60 * 60)),
+                            type: 'meeting',
                             dayIdx: start.getDay(),
                             date: format(start, 'yyyy-MM-dd'),
                             source: 'outlook'
